@@ -1,11 +1,10 @@
-*.retry
-__pycache__/
-.venv/
-
-# Images IOS / IOU, captures et fichiers Dynamips
 *.ghost
 *.bin
 *.image
+*.zip
 images/
+"images zipés/"
+"Cisco 7200 153-3.XB12/"
+"Cisco 2691/"
 ps/
 **/dynamips/
