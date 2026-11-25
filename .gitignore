@@ -1,3 +1,11 @@
 *.retry
 __pycache__/
 .venv/
+
+# Images IOS / IOU, captures et fichiers Dynamips
+*.ghost
+*.bin
+*.image
+images/
+ps/
+**/dynamips/
