@@ -1,0 +1,30 @@
+all:
+  children:
+    routers:
+      hosts:
+        routeur1:
+          ansible_host: 192.168.10.10  # L'IP de R1 sur le réseau 10
+    switches:
+      hosts:
+        switch1:
+          ansible_host: 192.168.20.20 # Nouvelle IP de IOU1
+        switch2:
+          ansible_host: 192.168.10.21
+  vars:
+    ansible_network_os: cisco.ios.ios
+    ansible_user: admin
+    ansible_password: Kernel@2026
+    ansible_connection: ansible.netcommon.network_cli
+    ansible_network_cli_ssh_type: paramiko
+    ansible_ssh_extra_args: '-o IPQoS=none -oPubkeyAuthentication=no'
+    ansible_connect_timeout: 60
+    ansible_command_timeout: 60
+    ansible_buffer_read_timeout: 2
+    ntp_servers:
+      - 162.159.200.1
+      - 162.159.200.123
+    vlans:
+      - vlan_id: 10
+        name: Data
+      - vlan_id: 20
+        name: Voice

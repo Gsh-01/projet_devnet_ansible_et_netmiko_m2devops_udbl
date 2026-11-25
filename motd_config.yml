@@ -1,0 +1,11 @@
+---
+- name: Configuration de la bannière MOTD
+  hosts: routers
+  gather_facts: no
+
+  tasks:
+    - name: Appliquer la bannière MOTD depuis un template Jinja2
+      cisco.ios.ios_banner:
+        banner: motd
+        text: "{{ lookup('template', 'templates/motd.j2') }}"
+        state: present

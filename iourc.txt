@@ -1,0 +1,2 @@
+[license]
+flash-sarl = 13d4546bac0b9a54;

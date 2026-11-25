@@ -1,0 +1,120 @@
+---
+- ansible.builtin.debug:
+    msg: START replaced ios_vrf_global state for integration tests on connection={{ ansible_connection }}
+
+- ansible.builtin.include_tasks: _remove_config.yaml
+- ansible.builtin.include_tasks: _populate_config.yaml
+
+- block:
+    - name: Replace the provided configuration with the existing running configuration
+      register: result
+      cisco.ios.ios_vrf_global: &id001
+        config:
+          vrfs:
+            - name: VRF7
+              description: VRF7 description
+              ipv4:
+                multicast:
+                  multitopology: true
+              ipv6:
+                multicast:
+                  multitopology: true
+              rd: "7:8"
+              route_target:
+                exports:
+                  - "198.51.100.5:400"
+                  - "198.51.100.2:401"
+                imports:
+                  - "198.51.100.5:400"
+                  - "198.51.100.2:401"
+              vpn:
+                id: "5:45"
+              vnet:
+                tag: 300
+        state: replaced
+
+    - name: Assert that correct set of commands were generated
+      ansible.builtin.assert:
+        that:
+          - "{{ replaced['commands'] | symmetric_difference(result['commands']) | length == 0 }}"
+
+    - name: Assert that before dict is correctly generated
+      ansible.builtin.assert:
+        that:
+          - "{{ replaced['before'] == result['before'] }}"
+
+    - name: Assert that after dict is correctly generated
+      ansible.builtin.assert:
+        that:
+          - "{{ replaced['after'] | symmetric_difference(result['after']) | length == 0 }}"
+
+    - name: Replaced provided VRF global configuration (idempotent)
+      register: result
+      cisco.ios.ios_vrf_global: *id001
+    - name: Assert that task was idempotent
+      ansible.builtin.assert:
+        that:
+          - result['changed'] == false
+
+    - name: Change the RD of an existing VRF using replaced state
+      register: result
+      cisco.ios.ios_vrf_global: &id002
+        config:
+          vrfs:
+            - name: VRF2
+              description: This is a test VRF for merged state
+              ipv4:
+                multicast:
+                  multitopology: true
+              ipv6:
+                multicast:
+                  multitopology: true
+              rd: "2:4"
+              route_target:
+                exports:
+                  - "198.51.100.5:400"
+                imports:
+                  - "198.51.100.5:400"
+              vpn:
+                id: "2:45"
+              vnet:
+                tag: 200
+        state: replaced
+
+    - name: Assert that the old RD is removed before the new RD is set
+      ansible.builtin.assert:
+        that:
+          - "{{ replaced_change_rd['commands'] | symmetric_difference(result['commands']) | length == 0 }}"
+          - "result['commands'].index('no rd 2:3') < result['commands'].index('rd 2:4')"
+
+    - name: Change the RD of an existing VRF using replaced state (idempotent)
+      register: result
+      cisco.ios.ios_vrf_global: *id002
+    - name: Assert that RD change task was idempotent
+      ansible.builtin.assert:
+        that:
+          - result['changed'] == false
+
+    - name: Remove the RD while keeping the route-targets
+      register: result
+      cisco.ios.ios_vrf_global:
+        config:
+          vrfs:
+            - name: VRF2
+              route_target:
+                exports:
+                  - "198.51.100.5:400"
+                imports:
+                  - "198.51.100.5:400"
+        state: replaced
+
+    - name: Assert that removing the RD re-applies the route-targets
+      ansible.builtin.assert:
+        that:
+          - "'no rd 2:4' in result['commands']"
+          # IOS-XE drops the route-targets with the RD, so they must be configured again.
+          - "'route-target export 198.51.100.5:400' in result['commands']"
+          - "'route-target import 198.51.100.5:400' in result['commands']"
+          - "result['commands'].index('no rd 2:4') < result['commands'].index('route-target export 198.51.100.5:400')"
+  always:
+    - ansible.builtin.include_tasks: _remove_config.yaml

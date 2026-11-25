@@ -1,0 +1,13 @@
+---
+- name: Déploiement des VLANs sur les switchs
+  hosts: switches
+  gather_facts: no
+
+  tasks:
+    - name: Créer les VLANs sur les switchs
+      cisco.ios.ios_vlans:
+        config:
+          - vlan_id: "{{ item.vlan_id }}"
+            name: "{{ item.name }}"
+        state: merged
+      loop: "{{ vlans }}"

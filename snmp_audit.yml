@@ -1,0 +1,15 @@
+---
+- name: Audit de conformité SNMP
+  hosts: routers
+  gather_facts: no
+
+  tasks:
+    - name: Récupérer la configuration SNMP actuelle
+      cisco.ios.ios_command:
+        commands: show running-config | include snmp-server
+      register: snmp_output
+
+    - name: Vérifier si SNMP est activé
+      ansible.builtin.fail:
+        msg: "ALERTE : Le protocole SNMP n'est pas activé sur {{ inventory_hostname }} !"
+      when: snmp_output.stdout[0] == ""

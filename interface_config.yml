@@ -1,0 +1,13 @@
+---
+- name: Configuration des interfaces sur le routeur
+  hosts: routers
+  gather_facts: no
+
+  tasks:
+    - name: Configurer les interfaces IP
+      cisco.ios.ios_config:
+        lines:
+          - "ip address {{ item.ip }} {{ item.mask }}"
+          - "no shutdown"
+        parents: "interface {{ item.name }}"
+      loop: "{{ interfaces }}"

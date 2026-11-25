@@ -1,0 +1,6 @@
+=========================================
+Équipement : routeur1
+Modèle : 2691
+Version IOS : 12.4(15)T14
+Numéro de série : XXXXXXXXXXX
+=========================================

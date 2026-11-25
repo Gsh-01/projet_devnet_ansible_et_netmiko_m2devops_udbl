@@ -1,0 +1,22 @@
+---
+- name: Collecte des informations (Facts) sur les équipements réseau
+  hosts: routers
+  gather_facts: no
+  
+  tasks:
+    - name: Récupérer les facts du routeur Cisco
+      cisco.ios.ios_facts:
+        gather_subset:
+          - all  # Récupère toutes les informations disponibles
+
+    - name: Sauvegarder les informations dans un fichier local
+      ansible.builtin.copy:
+        content: |
+          =========================================
+          Équipement : {{ inventory_hostname }}
+          Modèle : {{ ansible_net_model }}
+          Version IOS : {{ ansible_net_version }}
+          Numéro de série : {{ ansible_net_serialnum }}
+          =========================================
+        dest: "{{ playbook_dir }}/facts_{{ inventory_hostname }}.txt"
+      delegate_to: localhost

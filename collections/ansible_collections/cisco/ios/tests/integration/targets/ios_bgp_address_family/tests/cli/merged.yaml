@@ -1,0 +1,186 @@
+---
+- ansible.builtin.debug:
+    msg: START Merged ios_bgp_address_family state for integration tests on connection={{ ansible_connection }}
+
+- ansible.builtin.include_tasks: _initial_vrf_setup.yaml
+- ansible.builtin.include_tasks: _ospf_proc_setup.yaml
+- ansible.builtin.include_tasks: _check_l2vpn_vpls_support.yaml
+
+- name: Define BGP neighbors globally (required for l2vpn vpls neighbor activation)
+  when: l2vpn_vpls_supported
+  cisco.ios.ios_config:
+    lines:
+      - router bgp 65000
+      - neighbor 10.1.1.1 remote-as 100
+
+- block:
+    - name: Merge provided configuration with device configuration
+      register: result
+      cisco.ios.ios_bgp_address_family: &id001
+        config:
+          address_family:
+            # L2 specific configuration
+            # - afi: l2vpn
+            #   safi: evpn
+            #   neighbor:
+            #     - address: 198.51.100.1
+            #       activate: true
+            #       inherit: LEAF-EVPN-PEER-POLICY
+            # - afi: ipv4
+            #   vrf: green
+            #   redistribute:
+            #     - static:
+            #         set: true
+            #     - connected:
+            #         set: true
+            #   advertise:
+            #     afi: l2vpn
+            #     safi: evpn
+            - afi: ipv4
+              maximum_paths:
+                paths: 12
+              maximum_secondary_paths:
+                eibgp: 2
+              redistribute:
+                - connected:
+                    metric: 10
+                - ospf:
+                    process_id: 124
+                - ospf:
+                    process_id: 123
+                    match:
+                      internal: true
+                      externals:
+                        type_1: true
+                        type_2: true
+                      nssa_externals:
+                        type_1: true
+                        type_2: true
+                    metric: 10
+                    route_map: bar
+                - ospfv3:
+                    process_id: 123
+                    match:
+                      internal: true
+                      externals:
+                        type_1: true
+                        type_2: true
+                      nssa_externals:
+                        type_1: true
+                        type_2: true
+                    metric: 10
+                    route_map: bar
+            - afi: ipv4
+              aggregate_addresses:
+                - address: 192.0.3.1
+                  as_confed_set: true
+                  netmask: 255.255.255.255
+              default_metric: 12
+              distance:
+                external: 10
+                internal: 10
+                local: 100
+              networks:
+                - address: 198.51.111.11
+                  mask: 255.255.255.255
+                  route_map: test
+              safi: multicast
+              table_map:
+                filter: true
+                name: test_tableMap
+            - afi: ipv4
+              bgp:
+                dampening:
+                  max_suppress: 5
+                  penalty_half_time: 1
+                  reuse_route_val: 10
+                  suppress_route_val: 100
+                dmzlink_bw: true
+                soft_reconfig_backup: true
+              safi: mdt
+            - afi: ipv6
+              aggregate_addresses:
+                - address: 2001:DB8:1234::/48
+                  summary_only: true
+                - address: 2001:DB8:5678::/48
+                  as_confed_set: true
+              redistribute:
+                - ospf:
+                    process_id: 124
+                    match:
+                      internal: true
+                      externals:
+                        type_1: true
+                        type_2: true
+                      nssa_externals:
+                        type_1: true
+                        type_2: true
+                    metric: 10
+                    route_map: bar
+                    include_connected: true
+          as_number: "65000"
+        state: merged
+
+    - name: Assert that correct set of commands were generated
+      ansible.builtin.assert:
+        that:
+          - "{{ merged['commands'] | symmetric_difference(result['commands']) | length == 0 }}"
+
+    - name: Assert that before dicts are correctly generated
+      ansible.builtin.assert:
+        that:
+          - merged['before'] == {}
+
+    # - name: Assert that after dict is correctly generated
+    #   ansible.builtin.assert:
+    #     that:
+    #       - merged['after'] == result['after']
+
+    - name: Merge provided configuration with device configuration (idempotent)
+      register: result
+      cisco.ios.ios_bgp_address_family: *id001
+
+    - name: Assert that the previous task was idempotent
+      ansible.builtin.assert:
+        that:
+          - result['changed'] == false
+          - result.commands|length == 0
+
+    # l2vpn vpls requires a platform license (e.g. 'ax' on CSR1000v or
+    # 'network-advantage addon dna-advantage' on Catalyst 8000v/9000), kept
+    # as its own call/assertion so it can be skipped independently of the
+    # rest of this scenario on devices/images that lack the license.
+    - name: Merge l2vpn vpls address family (requires platform license)
+      when: l2vpn_vpls_supported
+      register: vpls_result
+      cisco.ios.ios_bgp_address_family: &id002
+        config:
+          address_family:
+            - afi: l2vpn
+              safi: vpls
+              neighbors:
+                - neighbor_address: 10.1.1.1
+                  activate: true
+                  remote_as: "100"
+          as_number: "65000"
+        state: merged
+
+    - name: Assert that correct l2vpn vpls commands were generated
+      when: l2vpn_vpls_supported
+      ansible.builtin.assert:
+        that:
+          - "{{ merged_vpls['commands'] | symmetric_difference(vpls_result['commands']) | length == 0 }}"
+
+    - name: Merge l2vpn vpls address family (idempotent)
+      when: l2vpn_vpls_supported
+      register: vpls_result
+      cisco.ios.ios_bgp_address_family: *id002
+
+    - name: Assert that the previous l2vpn vpls task was idempotent
+      when: l2vpn_vpls_supported
+      ansible.builtin.assert:
+        that:
+          - vpls_result['changed'] == false
+
+  always:
+    - ansible.builtin.include_tasks: _remove_config.yaml

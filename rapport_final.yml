@@ -1,0 +1,25 @@
+---
+- name: Génération du rapport final
+  hosts: all
+  gather_facts: no
+
+  tasks:
+    - name: Collecter les facts du routeur
+      cisco.ios.ios_facts:
+        gather_subset: all
+
+    - name: Obtenir la date du jour sur la machine de contrôle
+      ansible.builtin.command: date +%Y-%m-%d
+      register: date_cmd
+      delegate_to: localhost
+
+    - name: Obtenir l'heure sur la machine de contrôle
+      ansible.builtin.command: date +%H:%M:%S
+      register: time_cmd
+      delegate_to: localhost
+
+    - name: Générer le rapport HTML
+      ansible.builtin.template:
+        src: templates/rapport.j2
+        dest: "./rapport_final.html"
+      delegate_to: localhost

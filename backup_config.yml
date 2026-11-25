@@ -1,0 +1,30 @@
+---
+- name: Sauvegarde de la configuration des équipements
+  hosts: routers
+  gather_facts: no
+
+  tasks:
+    - name: Récupérer la configuration actuelle (running-config)
+      cisco.ios.ios_command:
+        commands: show running-config
+      register: config_output
+
+    - name: Obtenir la date du jour sur la machine de contrôle
+      ansible.builtin.command: date +%Y-%m-%d
+      register: date_cmd
+      delegate_to: localhost
+      run_once: true
+
+    - name: Créer un dossier horodaté sur le poste de contrôle
+      ansible.builtin.file:
+        path: "{{ playbook_dir }}/backups/{{ date_cmd.stdout }}"
+        state: directory
+        mode: '0755'
+      delegate_to: localhost
+      run_once: true
+
+    - name: Sauvegarder la configuration dans un fichier
+      ansible.builtin.copy:
+        content: "{{ config_output.stdout[0] }}"
+        dest: "{{ playbook_dir }}/backups/{{ date_cmd.stdout }}/{{ inventory_hostname }}_running-config.txt"
+      delegate_to: localhost

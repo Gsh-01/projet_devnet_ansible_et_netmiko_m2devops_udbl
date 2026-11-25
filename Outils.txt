@@ -1,0 +1,12 @@
+LISTE D'OUTILS
+--------------
+
+1. Switch Cisco
+2. Routeur Cisco
+3. Gns3
+4. Vpcs
+
+NB: La Plage à utiliser: 192.178.10.0
+User: admin
+pw: Kernel@2026
+ansible_connection: ansible.netcommon.network_clall

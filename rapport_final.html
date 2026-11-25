@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Rapport d'Automatisation - Projet DevOps</title>
+    <style>
+        body { font-family: 'Segoe UI', Arial, sans-serif; margin: 0; padding: 0; background-color: #fff; }
+        
+        /* --- STYLE DE LA PAGE DE GARDE --- */
+        .page-gard {
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            page-break-after: always;
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+        }
+        .page-gard h1 { color: #2c3e50; font-size: 2.5em; margin-bottom: 10px; }
+        .page-gard h2 { color: #34495e; font-size: 1.5em; font-weight: normal; margin-bottom: 40px; }
+        
+        /* --- STYLE DU LOGO --- */
+        .logo { 
+            width: 150px; 
+            margin-bottom: 20px; 
+            border-radius: 50%; /* Optionnel : rend le logo rond si c'est un carré */
+        }
+        
+        .page-gard .info { font-size: 1.1em; color: #555; margin: 5px 0; }
+        .page-gard .highlight { color: #2980b9; font-weight: bold; }
+        
+        /* --- STYLE DU TABLEAU (PAGE 2) --- */
+        .content { padding: 40px; }
+        .content h2 { color: #2c3e50; border-bottom: 2px solid #3498db; padding-bottom: 10px; }
+        table { border-collapse: collapse; width: 100%; margin-top: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+        th, td { border: 1px solid #ddd; padding: 12px; text-align: left; }
+        th { background-color: #3498db; color: white; font-weight: bold; }
+        tr:nth-child(even) { background-color: #f8f9fa; }
+        tr:hover { background-color: #e8f4fd; }
+        .status { color: #27ae60; font-weight: bold; }
+    </style>
+</head>
+<body>
+
+    <!-- ================= PAGE DE GARDE ================= -->
+    <div class="page-gard">
+        <!-- LIGNE DU LOGO CI-DESSOUS -->
+        <img src="logo_ubdl.jpg" alt="Logo UDBL" class="logo">
+        
+        <h1>UNIVERSITÉ DON BOSCO DE LUBUMBASHI</h1>
+        <h2>Faculté des Sciences Informatiques - Département Réseaux</h2>
+        
+        <div style="margin-top: 50px;">
+            <h1>RAPPORT DE PROJET DEVOPS</h1>
+            <h2>Automatisation d'une Infrastructure Réseau Multi-Services avec Ansible</h2>
+        </div>
+
+        <div style="margin-top: 80px;">
+            <p class="info">Présenté par : <span class="highlight">Gold KAUMB KANTENG et WILLIAM AGUSHA MARRION </span></p>
+            <p class="info">Promotion : <span class="highlight">M2 DEVOPS</span></p>
+            <p class="info">Année Académique : <span class="highlight">2026 – 2027</span></p>
+            <p class="info" style="margin-top: 20px;">Date de génération : 2026-11-21 à 00:07:24</p>
+        </div>
+    </div>
+
+    <!-- ================= PAGE 2 : TABLEAU ================= -->
+    <div class="content">
+        <h2>Bilan de l'Automatisation</h2>
+        <p>Le tableau ci-dessous récapitule les équipements réseau qui ont été configurés avec succès via Ansible :</p>
+        
+        <table>
+            <tr>
+                <th>Équipement</th>
+                <th>Rôle</th>
+                <th>Statut de la configuration</th>
+            </tr>
+                        <tr>
+                <td><strong>routeur1</strong></td>
+                <td>
+                    Routeur
+                                    </td>
+                <td class="status">✅ Configuré</td>
+            </tr>
+                        <tr>
+                <td><strong>switch1</strong></td>
+                <td>
+                    Switch
+                                    </td>
+                <td class="status">✅ Configuré</td>
+            </tr>
+                        <tr>
+                <td><strong>switch2</strong></td>
+                <td>
+                    Switch
+                                    </td>
+                <td class="status">✅ Configuré</td>
+            </tr>
+                    </table>
+    </div>
+
+</body>
+</html>

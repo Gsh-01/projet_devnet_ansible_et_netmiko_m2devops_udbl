@@ -1,0 +1,656 @@
+#
+# -*- coding: utf-8 -*-
+# Copyright 2020 Red Hat
+# GNU General Public License v3.0+
+# (see COPYING or https://www.gnu.org/licenses/gpl-3.0.txt)
+#
+
+from __future__ import absolute_import, division, print_function
+
+
+__metaclass__ = type
+
+"""
+The cisco.ios_bgp_global config file.
+It is in this file where the current configuration (as dict)
+is compared to the provided configuration (as dict) and the command set
+necessary to bring the current configuration to its desired end-state is
+created.
+"""
+
+from ansible_collections.ansible.netcommon.plugins.module_utils.network.common.rm_base.resource_module import (
+    ResourceModule,
+)
+from ansible_collections.ansible.netcommon.plugins.module_utils.network.common.utils import (
+    dict_merge,
+)
+
+from ansible_collections.cisco.ios.plugins.module_utils.network.ios.facts.facts import Facts
+from ansible_collections.cisco.ios.plugins.module_utils.network.ios.rm_templates.bgp_global import (
+    Bgp_globalTemplate,
+)
+from ansible_collections.cisco.ios.plugins.module_utils.network.ios.utils.utils import (
+    merge_bmp_activate,
+    normalize_bmp_activate,
+    validate_neighbor_addresses,
+)
+
+
+BMP_NEIGHBOR_DEACTIVATE_COMMAND = "no neighbor {0} bmp-activate"
+BMP_SERVER_NUMBER_PARSER = "bmp.servers.number"
+
+
+class Bgp_global(ResourceModule):
+    """
+    The cisco.ios_bgp_global config class
+    """
+
+    parsers = [
+        "auto_summary",
+        "bmp.buffer_size",
+        "bmp.initial_refresh.delay",
+        "bmp.initial_refresh.skip",
+        "default_information",
+        "default_metric",
+        "distance.admin",
+        "distance.bgp",
+        "distance.mbgp",
+        "maximum_paths.paths",
+        "maximum_paths.eibgp",
+        "maximum_paths.ibgp",
+        "maximum_secondary_paths.paths",
+        "maximum_secondary_paths.eibgp",
+        "maximum_secondary_paths.ibgp",
+        "synchronization",
+        "table_map",
+        "template.peer_policy",
+        "template.peer_session",
+        "timers",
+        "bgp.additional_paths",
+        "bgp.advertise_best_external",
+        "bgp.aggregate_timer",
+        "bgp.always_compare_med",
+        "bgp.asnotation",
+        "bgp.bestpath_options.aigp",
+        "bgp.bestpath_options.compare_routerid",
+        "bgp.bestpath_options.cost_community",
+        "bgp.bestpath_options.igp_metric",
+        "bgp.bestpath_options.med",
+        "bgp.client_to_client",
+        "bgp.cluster_id",
+        "bgp.confederation.peer",
+        "bgp.confederation.identifier",
+        "bgp.consistency_checker.auto_repair",
+        "bgp.consistency_checker.error_message",
+        "bgp.dampening",
+        "bgp.default.ipv4_unicast",
+        "bgp.default.route_target.filter",
+        "bgp.deterministic_med",
+        "bgp.dmzlink_bw",
+        "bgp.enforce_first_as",
+        "bgp.enhanced_error",
+        "bgp.fast_external_fallover",
+        "bgp.graceful_restart.set",
+        "bgp.graceful_restart.extended",
+        "bgp.graceful_restart.restart_time",
+        "bgp.graceful_restart.stalepath_time",
+        "bgp.graceful_shutdown.neighbors",
+        "bgp.graceful_shutdown.vrfs",
+        "bgp.listen.limit",
+        "bgp.listen.range",
+        "bgp.log_neighbor_changes",
+        "bgp.maxas_limit",
+        "bgp.maxcommunity_limit",
+        "bgp.maxextcommunity_limit",
+        "bgp.nexthop.route_map",
+        "bgp.nexthop.trigger.delay",
+        "bgp.nexthop.trigger.enable",
+        "bgp.nopeerup_delay_options.cold_boot",
+        "bgp.nopeerup_delay_options.post_boot",
+        "bgp.nopeerup_delay_options.nsf_switchover",
+        "bgp.nopeerup_delay_options.user_initiated",
+        "bgp.recursion",
+        "bgp.redistribute_internal",
+        "bgp.refresh.max_eor_time",
+        "bgp.refresh.stalepath_time",
+        "bgp.regexp",
+        "bgp.router_id",
+        "bgp.scan_time",
+        "bgp.slow_peer.detection.set",
+        "bgp.slow_peer.detection.threshold",
+        "bgp.slow_peer.split_update_group",
+        "bgp.snmp",
+        "bgp.sso",
+        "bgp.soft_reconfig_backup",
+        "bgp.suppress_inactive",
+        "bgp.transport",
+        "bgp.update_delay",
+        "bgp.update_group",
+        "bgp.upgrade_cli.set",
+        "bgp.upgrade_cli.af_mode",
+    ]
+
+    def __init__(self, module):
+        super(Bgp_global, self).__init__(
+            empty_fact_val={},
+            facts_module=Facts(module),
+            module=module,
+            resource="bgp_global",
+            tmplt=Bgp_globalTemplate(),
+        )
+
+    def execute_module(self):
+        """Execute the module
+
+        :rtype: A dictionary
+        :returns: The result from module execution
+        """
+        if self.state not in ["parsed", "gathered"]:
+            self.generate_commands()
+            self.run_commands()
+        return self.result
+
+    def generate_commands(self):
+        """Generate configuration commands to send based on
+        want, have and desired state.
+        """
+        if self.state in ["merged", "replaced", "overridden"]:
+            w_asn = self.want.get("as_number")
+            h_asn = self.have.get("as_number")
+
+            if h_asn and w_asn != h_asn:
+                self._module.fail_json(
+                    msg="BGP is already configured with ASN {0}. "
+                    "Please remove it with state: purged before "
+                    "configuring new ASN".format(h_asn),
+                )
+
+        if self.want:
+            self.handle_deprecates(self.want)
+
+        for each in self.want, self.have:
+            self._bgp_global_list_to_dict(each)
+
+        self._validate_peer_group_declarations(self.want)
+
+        if self.state in ["merged", "replaced", "overridden", "rendered", "deleted"]:
+            self._validate_bmp_server_strings(self.want)
+            validate_neighbor_addresses(self._module, self.want)
+
+        if self.state == "deleted":
+            # deleted, clean up global params
+            if not self.want or (self.have.get("as_number") == self.want.get("as_number")):
+                if "as_number" not in self.want:
+                    self.want["as_number"] = self.have.get("as_number")
+                self._set_bgp_defaults(self.want)
+                self._compare(self.want, have=self.have)
+
+        elif self.state == "purged":
+            # delete as_number takes down whole bgp config
+            if not self.want or (self.have.get("as_number") == self.want.get("as_number")):
+                self.addcmd(self.have or {}, "as_number", True)
+
+        else:
+            wantd = self.want
+            # if state is merged, merge want with have and then compare
+            if self.state == "merged":
+                bmp_activate = {
+                    addr: merge_bmp_activate(
+                        self.have.get("neighbors", {}).get(addr, {}).get("bmp_activate"),
+                        nbr["bmp_activate"],
+                    )
+                    for addr, nbr in self.want.get("neighbors", {}).items()
+                    if nbr.get("bmp_activate")
+                }
+                wantd = dict_merge(self.have, self.want)
+                for addr, value in bmp_activate.items():
+                    wantd["neighbors"][addr]["bmp_activate"] = value
+
+            self._compare(want=wantd, have=self.have)
+
+    def _validate_peer_group_declarations(self, want):
+        """Reject attributes combined with a peer-group deletion request."""
+        for name, neighbor in want.get("neighbors", {}).items():
+            if neighbor.get("peer_group_declaration") is not False:
+                continue
+            other_attributes = [
+                key
+                for key, value in neighbor.items()
+                if key not in ("neighbor_address", "peer_group_declaration")
+                and value not in (None, {}, [])
+            ]
+            if other_attributes:
+                self._module.fail_json(
+                    msg=(
+                        "peer_group_declaration: false cannot be combined with other "
+                        "neighbor attributes for neighbor {0}: {1}"
+                    ).format(name, ", ".join(sorted(other_attributes))),
+                )
+
+    def _compare(self, want, have):
+        """Leverages the base class `compare()` method and
+        populates the list of commands to be run by comparing
+        the `want` and `have` data with the `parsers` defined
+        for the Bgp_global network resource.
+        """
+        self.generic_list_parsers = ["distributes", "aggregate_addresses", "networks"]
+
+        if self._has_bgp_inject_maps(want):
+            self.generic_list_parsers.insert(0, "inject_maps")
+
+        cmd_len = len(self.commands)  # holds command length to add as_number
+
+        # for clean bgp global setup
+        if not have.get("bgp", {}).get("default"):
+            self._set_bgp_defaults(have)
+
+        # for dict type attributes
+        self.compare(parsers=self.parsers, want=want, have=have)
+
+        # bmp servers need their own sub-mode handling
+        self._compare_bmp_servers(
+            want.get("bmp", {}).get("servers", {}),
+            have.get("bmp", {}).get("servers", {}),
+        )
+
+        # for list type attributes
+        for _parse in self.generic_list_parsers:
+            if _parse == "inject_maps":
+                self._compare_generic_lists(
+                    want.get("bgp", {}).get(_parse, {}),
+                    have.get("bgp", {}).get(_parse, {}),
+                    _parse,
+                )
+            else:
+                self._compare_generic_lists(
+                    want.get(_parse, {}),
+                    have.get(_parse, {}),
+                    _parse,
+                )
+
+        # for neighbors
+        self._compare_neighbor_lists(
+            want.get("neighbors", {}),
+            have.get("neighbors", {}),
+        )
+
+        # for redistribute
+        self._compare_redistribute_lists(
+            want.get("redistribute", {}),
+            have.get("redistribute", {}),
+        )
+
+        # add as_number in the beginning of commands set if commands generated
+        if len(self.commands) != cmd_len or (not have and want):
+            self.commands.insert(
+                0,
+                self._tmplt.render(want or have, "as_number", False),
+            )
+
+    def _set_bgp_defaults(self, bgp_dict):
+        bgp_dict.setdefault("bgp", {}).setdefault("default", {}).setdefault(
+            "ipv4_unicast",
+            True,
+        )
+        bgp_dict.setdefault("bgp", {}).setdefault("default", {}).setdefault(
+            "route_target",
+            {},
+        ).setdefault("filter", True)
+
+    def _has_bgp_inject_maps(self, want):
+        if want.get("bgp", {}).get("inject_maps", {}):
+            return True
+        else:
+            return False
+
+    def _compare_redistribute_lists(self, want, have):
+        """Compare redistribute list of dict"""
+        redist_parses = [
+            "application",
+            "bgp",
+            "connected",
+            "eigrp",
+            "isis",
+            "iso_igrp",
+            "lisp",
+            "mobile",
+            "odr",
+            "ospf",
+            "ospfv3",
+            "rip",
+            "static",
+            "vrf",
+        ]
+        for name, w_redist in want.items():
+            have_nbr = have.pop(name, {})
+            self.compare(parsers=redist_parses, want=w_redist, have=have_nbr)
+
+        # remove remaining items in have for replaced state
+        for name, h_redist in have.items():
+            self.compare(parsers=redist_parses, want={}, have=h_redist)
+
+    def _compare_neighbor_lists(self, want, have):
+        """Compare neighbor list of dict"""
+        neig_parses = [
+            "peer_group_declaration",
+            "remote_as",
+            "peer_group",
+            "cluster_id",
+            "description",
+            "disable_connected_check",
+            "ebgp_multihop",
+            "fall_over.bfd",
+            "fall_over.route_map",
+            "ha_mode",
+            "inherit",
+            "local_as",
+            "log_neighbor_changes",
+            "password_options",
+            "path_attribute.discard",
+            "path_attribute.treat_as_withdraw",
+            "shutdown",
+            "soft_reconfiguration",
+            "ntimers",
+            "transport.connection_mode",
+            "transport.multi_session",
+            "transport.path_mtu_discovery",
+            "ttl_security",
+            "unsuppress_map",
+            "update_source",
+            "version",
+            "weight",
+            "activate",
+            "additional_paths",
+            "advertise.additional_paths",
+            "advertise.best_external",
+            "advertise.diverse_path",
+            "advertise_map",
+            "advertisement_interval",
+            "aigp",
+            "aigp.send.cost_community",
+            "aigp.send.med",
+            "allow_policy",
+            "allowas_in",
+            "as_override",
+            "capability",
+            "default_originate",
+            "default_originate.route_map",
+            "dmzlink_bw",
+            "filter_list",
+            "maximum_prefix",
+            "next_hop_self.set",
+            "next_hop_self.all",
+            "next_hop_unchanged.set",
+            "next_hop_unchanged.allpaths",
+            "remove_private_as.set",
+            "remove_private_as.all",
+            "remove_private_as.replace_as",
+            "route_reflector_client",
+            "route_server_client.set",
+            "route_server_client.context",
+            "send_community.set",
+            "send_community.both",
+            "send_community.extended",
+            "send_community.standard",
+            "send_label.set",
+            "send_label.explicit_null",
+            "slow_peer.detection",
+            "slow_peer.split_update_group",
+            "translate_update.set",
+            "translate_update.nlri",
+        ]
+
+        for name, w_neighbor in sorted(
+            want.items(),
+            key=lambda neighbor: not neighbor[1].get("peer_group_declaration"),
+        ):
+            neighbor_parses = neig_parses.copy()
+            handle_shutdown_default = False
+            have_nbr = have.pop(name, {})
+            want_route = w_neighbor.pop("route_maps", {})
+            have_route = have_nbr.pop("route_maps", {})
+            if w_neighbor.get("peer_group_declaration") is False:
+                if self.state == "rendered":
+                    self.addcmd(w_neighbor, "peer_group_declaration", True)
+                elif have_nbr.get("peer_group_declaration"):
+                    self.addcmd(have_nbr, "peer_group_declaration", True)
+                w_neighbor.pop("peer_group_declaration")
+                have_nbr.pop("peer_group_declaration", None)
+                continue
+            if (
+                not w_neighbor.get("shutdown", {}).get("set")
+                and have_nbr.get("shutdown", {}).get("set")
+                and self.state in ["merged", "replaced", "overridden"]
+            ):
+                neighbor_parses.remove("shutdown")
+                handle_shutdown_default = True
+            # bmp-activate is ignored by IOS-XE for a neighbor that does not exist yet,
+            # so it must follow remote-as / peer-group
+            want_bmp = w_neighbor.pop("bmp_activate", None)
+            have_bmp = have_nbr.pop("bmp_activate", None)
+            self.compare(parsers=neighbor_parses, want=w_neighbor, have=have_nbr)
+            if handle_shutdown_default:
+                self.addcmd(have_nbr, "shutdown", True)
+            self._compare_bmp_activate(w_neighbor, have_nbr, want_bmp, have_bmp)
+
+            if want_route:
+                for k_rmps, w_rmps in want_route.items():
+                    have_rmps = have_route.pop(k_rmps, {})
+                    w_rmps["neighbor_address"] = w_neighbor.get("neighbor_address")
+                    if have_rmps:
+                        have_rmps["neighbor_address"] = have_nbr.get("neighbor_address")
+                        have_rmps = {"route_maps": have_rmps}
+                    self.compare(
+                        parsers=["route_maps"],
+                        want={"route_maps": w_rmps},
+                        have=have_rmps,
+                    )
+        for name, h_neighbor in have.items():
+            self.compare(parsers="neighbor_address", want={}, have=h_neighbor)
+
+    def _compare_bmp_activate(self, w_neighbor, h_neighbor, w_bmp, h_bmp):
+        """Compare neighbor bmp-activate.
+
+        IOS-XE silently ignores a ``bmp-activate`` command on a neighbor that
+        is already activated, so a change has to clear the old activation first.
+        """
+        have = normalize_bmp_activate(h_bmp)
+        want = normalize_bmp_activate(w_bmp)
+        address = w_neighbor.get("neighbor_address") or h_neighbor.get("neighbor_address")
+
+        if self.state == "deleted":
+            if not have:
+                return
+            if not want or want.get("all") or have.get("all"):
+                self.commands.append(BMP_NEIGHBOR_DEACTIVATE_COMMAND.format(address))
+                return
+
+            remaining = [
+                server for server in have.get("servers", []) if server not in want["servers"]
+            ]
+            if remaining != have.get("servers", []):
+                self.commands.append(BMP_NEIGHBOR_DEACTIVATE_COMMAND.format(address))
+                if remaining:
+                    self.addcmd(
+                        {"neighbor_address": address, "bmp_activate": {"servers": remaining}},
+                        "bmp_activate",
+                        False,
+                    )
+            return
+
+        if want == have:
+            return
+        if have:
+            self.commands.append(BMP_NEIGHBOR_DEACTIVATE_COMMAND.format(address))
+        if want:
+            self.addcmd({"neighbor_address": address, "bmp_activate": want}, "bmp_activate", False)
+
+    def _compare_bmp_servers(self, want, have):
+        """Compare the BMP servers, each of which lives in its own sub-mode."""
+        if self.state == "deleted":
+            numbers = want if want else have
+            for number in sorted(numbers, key=int):
+                if number in have:
+                    self.addcmd(have[number], BMP_SERVER_NUMBER_PARSER, True)
+            return
+
+        for number in sorted(want, key=int):
+            w_srv = want[number]
+            h_srv = have.pop(number, {})
+            begin = len(self.commands)
+            self._compare_bmp_server(w_srv, h_srv)
+            if len(self.commands) != begin or not h_srv:
+                self.commands.insert(
+                    begin,
+                    self._tmplt.render(w_srv, BMP_SERVER_NUMBER_PARSER, False),
+                )
+                self.commands.append("exit-bmp-server-mode")
+
+        # remove servers that are not wanted (replaced, overridden, deleted)
+        for number in sorted(have, key=int):
+            self.addcmd(have[number], BMP_SERVER_NUMBER_PARSER, True)
+
+    def _compare_bmp_server(self, w_srv, h_srv):
+        """Compare the options of a single BMP server.
+
+        IOS-XE silently ignores an ``address`` change, or its removal, while
+        the server is activated, and ``activate`` has to follow the address.
+        """
+        want_active = bool(w_srv.get("activate"))
+        have_active = bool(h_srv.get("activate"))
+        w_addr = w_srv.get("address")
+        h_addr = h_srv.get("address")
+        addr_changed = w_addr != h_addr
+
+        if have_active and (not want_active or addr_changed):
+            self.addcmd(h_srv, "bmp.servers.activate", True)
+            have_active = False
+
+        if addr_changed:
+            if h_addr:
+                self.addcmd(h_srv, "bmp.servers.address", True)
+            if w_addr:
+                self.addcmd(w_srv, "bmp.servers.address", False)
+
+        self.compare(
+            parsers=[
+                "bmp.servers.description",
+                "bmp.servers.failure_retry_delay",
+                "bmp.servers.flapping_delay",
+                "bmp.servers.initial_delay",
+                "bmp.servers.set_ip_dscp",
+                "bmp.servers.stats_reporting_period",
+                "bmp.servers.update_source",
+            ],
+            want=w_srv,
+            have=h_srv,
+        )
+
+        if want_active and not have_active:
+            self.addcmd(w_srv, "bmp.servers.activate", False)
+
+    def _bmp_list_to_dict(self, bmp):
+        """Key the BMP servers by number, folding in the deprecated server/server_options."""
+        servers = {str(srv["number"]): srv for srv in bmp.pop("servers", None) or []}
+        legacy_number = bmp.pop("server", None)
+        legacy_options = bmp.pop("server_options", None) or {}
+        if legacy_number is not None:
+            srv = servers.setdefault(str(legacy_number), {"number": legacy_number})
+            for key, value in legacy_options.items():
+                srv.setdefault(key, value)
+        elif legacy_options:
+            self._module.fail_json(msg="bmp.server_options requires bmp.server to be set")
+        if servers:
+            bmp["servers"] = servers
+
+    def _validate_bmp_server_strings(self, data):
+        """Reject line breaks in BMP values that are interpolated into CLI commands."""
+        servers = data.get("bmp", {}).get("servers", {})
+        for number, server in servers.items():
+            address = server.get("address") or {}
+            values = {
+                "address.host": address.get("host"),
+                "description": server.get("description"),
+                "update_source": server.get("update_source"),
+            }
+            for name, value in values.items():
+                if isinstance(value, str) and ("\r" in value or "\n" in value):
+                    self._module.fail_json(
+                        msg=(
+                            "BMP server {0} option {1} must not contain carriage returns "
+                            "or line feeds"
+                        ).format(number, name),
+                    )
+
+    def _compare_generic_lists(self, w_attr, h_attr, parser):
+        """Handling of gereric list options."""
+        for wkey, wentry in w_attr.items():
+            if wentry != h_attr.pop(wkey, {}):
+                self.addcmd(wentry, parser, False)
+
+        # remove remaining items in have for replaced state
+        for hkey, hentry in h_attr.items():
+            self.addcmd(hentry, parser, True)
+
+    def _bgp_global_list_to_dict(self, tmp_data):
+        """Convert all list of dicts to dicts of dicts"""
+        p_key = {
+            "aggregate_addresses": "address",
+            "inject_maps": "name",
+            "distributes": ["acl", "gateway", "prefix"],
+            "neighbors": "neighbor_address",
+            "route_maps": "name",
+            "networks": "address",
+            "bgp": None,
+            "redistribute": [
+                "application",
+                "bgp",
+                "eigrp",
+                "isis",
+                "iso_igrp",
+                "ospf",
+                "ospfv3",
+                "vrf",
+            ],
+        }
+        if tmp_data.get("bmp"):
+            self._bmp_list_to_dict(tmp_data["bmp"])
+        for k, _v in p_key.items():
+            if tmp_data.get(k) and k not in ["distributes", "redistribute", "bgp"]:
+                if k == "neighbors":
+                    for neb in tmp_data.get("neighbors"):
+                        neb = self._bgp_global_list_to_dict(neb)
+                        _ntimer = neb.pop("timers", {})
+                        if _ntimer:
+                            neb["ntimers"] = _ntimer
+                tmp_data[k] = {str(i[p_key[k]]): i for i in tmp_data[k]}
+            elif tmp_data.get("distributes") and k == "distributes":
+                tmp_data[k] = {str("".join([i.get(j, "") for j in _v])): i for i in tmp_data[k]}
+            elif tmp_data.get("redistribute") and k == "redistribute":
+                tmp_data[k] = {
+                    str(
+                        [
+                            ky + vl.get("name", "") + vl.get("process_id", "") if ky in _v else ky
+                            for ky, vl in i.items()
+                        ][0],
+                    ): i
+                    for i in tmp_data[k]
+                }
+            elif tmp_data.get("bgp") and k == "bgp":
+                tmp_data[k] = self._bgp_global_list_to_dict(tmp_data.get(k))
+        return tmp_data
+
+    def handle_deprecates(self, want, is_nbr=False):
+        """
+        Handles deprecated values post rewrite
+        neighbor.route_map [dict] - neighbor.route_maps [list:dict]
+
+        Args:
+            want (_type_): Handle want attributes for deprecated values
+            is_nbr (bool, optional): activates neighbor part on recursion. Defaults to False.
+        """
+        if not is_nbr:
+            if want.get("neighbors"):
+                _want_nbrs = want.get("neighbors", {})
+                for nbr in _want_nbrs:
+                    nbr = self.handle_deprecates(nbr, is_nbr=True)
